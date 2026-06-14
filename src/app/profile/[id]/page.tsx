@@ -81,7 +81,7 @@ export default function PublicProfilePage() {
   return (
     <>
       <NavBar />
-      <main style={{ minHeight: "100vh", paddingBottom: 80 }}>
+      <main style={{ minHeight: "100vh", paddingBottom: 120 }}>
         <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 16px" }}>
 
           {/* Back */}

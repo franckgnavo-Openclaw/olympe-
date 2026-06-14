@@ -117,7 +117,7 @@ export default function RunDetailPage() {
 
   return (
     <>
-      <main style={{ minHeight: "100vh", paddingBottom: 80 }}>
+      <main style={{ minHeight: "100vh", paddingBottom: 120 }}>
         {/* Header */}
         <header style={{
           display: "flex", alignItems: "center", gap: 16, padding: "0 16px", height: 60,
