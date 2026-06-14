@@ -139,9 +139,11 @@ export function GameModal({ open = true, onClose, title, subtitle, icon, iconGlo
               position: "relative",
               width: "100%",
               maxWidth: width,
+              maxHeight: "85vh",
+              overflowY: "auto",
+              overflowX: "hidden",
               background: "linear-gradient(180deg, #1a1410 0%, #0e0b08 60%, #0a0806 100%)",
               border: "1px solid #c9a22750",
-              overflow: "hidden",
             }}
           >
             {/* Radial light behind content */}
