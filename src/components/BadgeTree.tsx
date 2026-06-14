@@ -271,11 +271,14 @@ export function BadgeTree({ earnedBadges }: Props) {
                   strokeDasharray={earned ? "3 3" : "2 4"} strokeOpacity={earned ? 0.5 : 0.25}
                 />
                 {isRoot && <circle cx={node.x} cy={node.y} r={R + 7} fill="none" stroke="#c9a22750" strokeWidth={0.8} strokeDasharray="4 3"/>}
-                <foreignObject x={node.x - 12} y={node.y - 13} width={24} height={24}>
-                  <div style={{ fontSize: isRoot ? 15 : 13, textAlign: "center", lineHeight: "24px", filter: earned ? "none" : "grayscale(1) brightness(0.2)", userSelect: "none" }}>
-                    {badge?.emoji ?? "?"}
-                  </div>
-                </foreignObject>
+                <text
+                  x={node.x} y={node.y + 5}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={isRoot ? 15 : 13}
+                  opacity={earned ? 1 : 0.2}
+                >
+                  {badge?.emoji ?? "?"}
+                </text>
                 {!earned && (
                   <text x={node.x + R - 4} y={node.y + R - 2} fontSize={8} textAnchor="middle" fill="#2a2420">🔒</text>
                 )}
