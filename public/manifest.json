@@ -1,0 +1,17 @@
+{
+  "name": "Olympe",
+  "short_name": "Olympe",
+  "description": "Courir comme un Dieu",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080706",
+  "theme_color": "#080706",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

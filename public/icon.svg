@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#080706"/>
+  <!-- Hexagon outer -->
+  <path d="M256 40L440 148V364L256 472L72 364V148L256 40Z" stroke="#c9a227" stroke-width="16" fill="#141210"/>
+  <!-- Inner glow fill -->
+  <path d="M256 40L440 148V364L256 472L72 364V148L256 40Z" fill="url(#glow)"/>
+  <!-- Rune lines -->
+  <line x1="256" y1="128" x2="256" y2="384" stroke="#c9a227" stroke-width="14" stroke-linecap="round"/>
+  <line x1="171" y1="179" x2="256" y2="128" stroke="#c9a227" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  <line x1="341" y1="179" x2="256" y2="128" stroke="#c9a227" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  <line x1="171" y1="333" x2="256" y2="384" stroke="#c9a227" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  <line x1="341" y1="333" x2="256" y2="384" stroke="#c9a227" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c9a227" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#c9a227" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
