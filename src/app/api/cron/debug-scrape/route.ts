@@ -40,16 +40,22 @@ export async function GET() {
     return true;
   });
 
-  // Fetch first fiche page to see if distance is there
+  // Fetch a Running fiche to see if distance is there
+  const runningIdx = raceRows.findIndex(r => r.type.includes("Running"));
+  const ficheTarget = fichLinks[runningIdx] ?? fichLinks[0];
   let ficheExample: Record<string, unknown> = {};
-  if (fichLinks[0]) {
+  if (ficheTarget) {
     try {
-      const ficheUrl = fichLinks[0].startsWith("http") ? fichLinks[0] : `https://www.athle.fr${fichLinks[0]}`;
+      const ficheUrl = ficheTarget.startsWith("http") ? ficheTarget : `https://www.athle.fr${ficheTarget}`;
       const ficheHtml = await fetchHtml(ficheUrl);
       const $f = cheerio.load(ficheHtml);
+      const distMatch = ficheHtml.match(/(\d+[\s,.]?\d*)\s*(km|kilomètre|mètre)\b/gi);
       ficheExample = {
         url: ficheUrl,
-        bodyText: $f("body").text().replace(/\s+/g, " ").trim().slice(0, 800),
+        // body text from char 800 onwards (skip nav)
+        bodyMid: $f("body").text().replace(/\s+/g, " ").trim().slice(800, 2500),
+        tableText: $f("table").first().text().replace(/\s+/g, " ").trim().slice(0, 600),
+        distanceMatches: distMatch?.slice(0, 10) ?? [],
       };
     } catch (e) {
       ficheExample = { error: String(e) };
