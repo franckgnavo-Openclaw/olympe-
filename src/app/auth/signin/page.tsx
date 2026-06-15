@@ -98,14 +98,14 @@ export default function SignInPage() {
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <form onSubmit={handleSubmit} autoComplete="on" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
-              <label style={{ display: "block", fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.08em", marginBottom: 8 }}>EMAIL</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="toi@email.com" className="game-input" />
+              <label htmlFor="email" style={{ display: "block", fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.08em", marginBottom: 8 }}>EMAIL</label>
+              <input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="toi@email.com" className="game-input" />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.08em", marginBottom: 8 }}>MOT DE PASSE</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" className="game-input" />
+              <label htmlFor="password" style={{ display: "block", fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.08em", marginBottom: 8 }}>MOT DE PASSE</label>
+              <input id="password" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" className="game-input" />
             </div>
             <div style={{ marginTop: 4 }}>
               <GlowButton type="submit" disabled={loading} fullWidth>
