@@ -129,7 +129,7 @@ export function GameModal({ open = true, onClose, title, subtitle, icon, iconGlo
             onClick={onClose}
           />
 
-          {/* Panel */}
+          {/* Panel — outer frame (fixed, no scroll) */}
           <motion.div
             initial={{ opacity: 0, scale: 0.88, y: 24 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -140,23 +140,29 @@ export function GameModal({ open = true, onClose, title, subtitle, icon, iconGlo
               width: "100%",
               maxWidth: width,
               maxHeight: "85vh",
-              overflowY: "auto",
-              overflowX: "hidden",
-              background: "linear-gradient(180deg, #1a1410 0%, #0e0b08 60%, #0a0806 100%)",
               border: "1px solid #c9a22750",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            {/* Radial light behind content */}
+            {/* Corner ornaments — always at visual corners */}
+            <div style={{ position: "absolute", top: -1, left: -1, width: 20, height: 20, borderTop: "2px solid #c9a227", borderLeft: "2px solid #c9a227", zIndex: 2, pointerEvents: "none" }}/>
+            <div style={{ position: "absolute", top: -1, right: -1, width: 20, height: 20, borderTop: "2px solid #c9a227", borderRight: "2px solid #c9a227", zIndex: 2, pointerEvents: "none" }}/>
+            <div style={{ position: "absolute", bottom: -1, left: -1, width: 20, height: 20, borderBottom: "2px solid #c9a227", borderLeft: "2px solid #c9a227", zIndex: 2, pointerEvents: "none" }}/>
+            <div style={{ position: "absolute", bottom: -1, right: -1, width: 20, height: 20, borderBottom: "2px solid #c9a227", borderRight: "2px solid #c9a227", zIndex: 2, pointerEvents: "none" }}/>
+
+            {/* Scrollable content */}
+            <div style={{
+              overflowY: "auto",
+              overflowX: "hidden",
+              flex: 1,
+              background: "linear-gradient(180deg, #1a1410 0%, #0e0b08 60%, #0a0806 100%)",
+            }}>
+            {/* Radial light */}
             <div style={{
               position: "absolute", inset: 0, pointerEvents: "none",
               background: "radial-gradient(ellipse at 50% 30%, rgba(201,162,39,0.07) 0%, transparent 65%)",
             }}/>
-
-            {/* Corner ornaments */}
-            <div style={{ position: "absolute", top: -1, left: -1, width: 20, height: 20, borderTop: "2px solid #c9a227", borderLeft: "2px solid #c9a227" }}/>
-            <div style={{ position: "absolute", top: -1, right: -1, width: 20, height: 20, borderTop: "2px solid #c9a227", borderRight: "2px solid #c9a227" }}/>
-            <div style={{ position: "absolute", bottom: -1, left: -1, width: 20, height: 20, borderBottom: "2px solid #c9a227", borderLeft: "2px solid #c9a227" }}/>
-            <div style={{ position: "absolute", bottom: -1, right: -1, width: 20, height: 20, borderBottom: "2px solid #c9a227", borderRight: "2px solid #c9a227" }}/>
 
             <div style={{ padding: "20px 24px 0", position: "relative" }}>
               <TopOrnament />
@@ -238,6 +244,7 @@ export function GameModal({ open = true, onClose, title, subtitle, icon, iconGlo
             )}
 
             {!actions && <div style={{ height: 20 }} />}
+            </div>{/* end scrollable */}
           </motion.div>
         </motion.div>
       )}

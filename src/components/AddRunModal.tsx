@@ -121,6 +121,8 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [distanceKm, setDistanceKm] = useState("");
   const [durationMin, setDurationMin] = useState("");
+  const [paceMin, setPaceMin] = useState("");
+  const [paceSec, setPaceSec] = useState("");
   const [notes, setNotes] = useState("");
   const [postFile, setPostFile] = useState<File | null>(null);
   const [postPreview, setPostPreview] = useState<string | null>(null);
@@ -132,6 +134,19 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
   const [error, setError] = useState("");
 
   function handlePostPhoto(f: File) { setPostFile(f); setPostPreview(URL.createObjectURL(f)); }
+
+  // Recalcule la distance à partir de l'allure (min:sec/km) et de la durée
+  function recomputeDistance(pMin: string, pSec: string, dur: string) {
+    const m = parseInt(pMin) || 0;
+    const s = parseInt(pSec) || 0;
+    const t = parseFloat(dur);
+    const paceDec = m + s / 60;
+    if (paceDec > 0 && t > 0) {
+      setDistanceKm((t / paceDec).toFixed(2));
+    } else {
+      setDistanceKm("");
+    }
+  }
 
   async function handleSubmitRun(e: React.FormEvent) {
     e.preventDefault();
@@ -215,7 +230,7 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
               <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>Programme</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {PROGRAMS.map(prog => (
-                  <button key={prog.id} type="button" onClick={() => { setSelectedProgramId(prog.id); setSelectedSessionDay(null); setDurationMin(""); }}
+                  <button key={prog.id} type="button" onClick={() => { setSelectedProgramId(prog.id); setSelectedSessionDay(null); setDurationMin(""); setDistanceKm(""); }}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: selectedProgramId === prog.id ? "rgba(201,162,39,0.12)" : "var(--surface)", border: `1px solid ${selectedProgramId === prog.id ? "var(--gold)" : "var(--border)"}`, cursor: "pointer", textAlign: "left", transition: "all 0.15s", position: "relative" }}>
                     {selectedProgramId === prog.id && <div style={{ position: "absolute", top: -1, left: -1, width: 8, height: 8, borderTop: "1px solid var(--gold)", borderLeft: "1px solid var(--gold)" }} />}
                     <span style={{ fontSize: 18 }}>{prog.emoji}</span>
@@ -241,7 +256,10 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
                     return (
                       <button key={s.day} type="button" onClick={() => {
                         setSelectedSessionDay(s.day);
-                        if (s.durationMin) setDurationMin(String(s.durationMin));
+                        if (s.durationMin) {
+                          setDurationMin(String(s.durationMin));
+                          recomputeDistance(paceMin, paceSec, String(s.durationMin));
+                        }
                       }}
                         style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: isSelected ? `${meta.color}15` : "transparent", border: `1px solid ${isSelected ? meta.color : "var(--border)"}`, cursor: "pointer", textAlign: "left", transition: "all 0.15s" }}>
                         <span style={{ fontFamily: "'Cinzel', serif", fontSize: 10, color: "var(--muted2)", width: 24, flexShrink: 0 }}>J{s.day}</span>
@@ -270,18 +288,51 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
         )}
         </AnimatePresence>
 
-        {/* 4. Distance */}
-        <Field label="Distance (km)">
-          <input type="number" step="0.01" min="0.1" value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} placeholder="5.4" style={iStyle} className="game-input" />
-        </Field>
+        {isProgramRun ? (
+          <>
+            {/* Durée — pré-remplie depuis la séance, éditable */}
+            <Field label={`Durée (min)${selectedSessionDay ? " · pré-remplie" : ""}`}>
+              <input type="number" min="1" value={durationMin}
+                onChange={(e) => { setDurationMin(e.target.value); recomputeDistance(paceMin, paceSec, e.target.value); }}
+                placeholder="30" style={{ ...iStyle, borderColor: selectedSessionDay ? "var(--gold)" : "#3d3020" }} className="game-input" />
+            </Field>
 
-        {/* 5. Durée — auto-remplie si séance programme sélectionnée, toujours éditable */}
-        <Field label={`Durée (min)${isProgramRun && selectedSessionDay ? " · pré-remplie" : ""}`}>
-          <input type="number" min="1" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} placeholder="30" style={{ ...iStyle, borderColor: isProgramRun && selectedSessionDay ? "var(--gold)" : "#3d3020" }} className="game-input" />
-        </Field>
+            {/* Allure — l'utilisateur saisit, la distance se calcule */}
+            <Field label="Allure (min/km)">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="number" min="0" max="59" value={paceMin}
+                  onChange={(e) => { setPaceMin(e.target.value); recomputeDistance(e.target.value, paceSec, durationMin); }}
+                  placeholder="5" style={{ ...iStyle, textAlign: "center" }} className="game-input" />
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--gold)" }}>:</span>
+                <input type="number" min="0" max="59" value={paceSec}
+                  onChange={(e) => { setPaceSec(e.target.value); recomputeDistance(paceMin, e.target.value, durationMin); }}
+                  placeholder="30" style={{ ...iStyle, textAlign: "center" }} className="game-input" />
+                <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>MIN/KM</span>
+              </div>
+            </Field>
 
-        {/* Pace indicator */}
-        {(() => {
+            {/* Distance — calculée automatiquement */}
+            <Field label="Distance (km) · calculée">
+              <input type="number" value={distanceKm} readOnly placeholder="—"
+                style={{ ...iStyle, borderColor: "var(--gold)", background: "rgba(201,162,39,0.08)", color: "var(--gold)", fontWeight: 700, cursor: "default" }} className="game-input" />
+            </Field>
+          </>
+        ) : (
+          <>
+            {/* 4. Distance */}
+            <Field label="Distance (km)">
+              <input type="number" step="0.01" min="0.1" value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} placeholder="5.4" style={iStyle} className="game-input" />
+            </Field>
+
+            {/* 5. Durée */}
+            <Field label="Durée (min)">
+              <input type="number" min="1" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} placeholder="30" style={iStyle} className="game-input" />
+            </Field>
+          </>
+        )}
+
+        {/* Pace indicator — seulement pour run libre */}
+        {!isProgramRun && (() => {
           const d = parseFloat(distanceKm);
           const t = parseFloat(durationMin);
           if (!d || !t || d <= 0 || t <= 0) return null;
