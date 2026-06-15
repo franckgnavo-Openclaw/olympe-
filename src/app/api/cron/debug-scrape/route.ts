@@ -1,55 +1,31 @@
 import { NextResponse } from "next/server";
-import * as cheerio from "cheerio";
 
 export async function GET() {
-  const BASE = "https://www.courseapied.net";
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const url = `${BASE}/calendrier/${now.getFullYear()}/${month}`;
-
-  let html = "";
-  let fetchError = "";
-
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; OlympeBot/1.0)" },
-      signal: AbortSignal.timeout(15000),
-    });
-    html = await res.text();
-  } catch (e) {
-    fetchError = String(e);
-  }
-
-  if (fetchError) return NextResponse.json({ error: fetchError, url });
-
-  const $ = cheerio.load(html);
-
-  // Collect all tag/class combos in the page to understand its structure
-  const tagSummary: Record<string, number> = {};
-  $("*").each((_, el) => {
-    const tag = (el as { tagName?: string }).tagName ?? "unknown";
-    const cls = $(el).attr("class") ?? "";
-    const key = cls ? `${tag}.${cls.split(" ")[0]}` : tag;
-    tagSummary[key] = (tagSummary[key] ?? 0) + 1;
-  });
-
-  // Try every possible table/list selector
-  const selectors = [
-    "tr", "table", ".course", ".event", "li", ".calendrier",
-    "[class*='course']", "[class*='race']", "[class*='event']", "[class*='cal']",
+  const candidates = [
+    "https://www.courseapied.net/courses/",
+    "https://www.courseapied.net/calendrier/",
+    "https://www.courseapied.net/agenda/",
+    "https://www.courseapied.net/",
+    "https://www.runagain.fr/calendrier-courses-a-pied",
+    "https://www.sport-actif.com/calendrier-course-a-pied/",
+    "https://www.agenda-rando.com/calendrier-course-pied.php",
+    "https://www.klikego.com/resultats/calendrier/1",
   ];
-  const selectorHits: Record<string, number> = {};
-  for (const s of selectors) {
-    selectorHits[s] = $(s).length;
+
+  const results: Record<string, { status: number; htmlLength: number; preview: string }> = {};
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36" },
+        signal: AbortSignal.timeout(8000),
+      });
+      const text = await res.text();
+      results[url] = { status: res.status, htmlLength: text.length, preview: text.slice(0, 300) };
+    } catch (e) {
+      results[url] = { status: 0, htmlLength: 0, preview: String(e) };
+    }
   }
 
-  // Return first 3000 chars of HTML for manual inspection
-  const htmlPreview = html.slice(0, 3000);
-
-  // Top 30 most frequent classes/tags
-  const topTags = Object.entries(tagSummary)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 30);
-
-  return NextResponse.json({ url, htmlLength: html.length, htmlPreview, selectorHits, topTags });
+  return NextResponse.json(results);
 }
