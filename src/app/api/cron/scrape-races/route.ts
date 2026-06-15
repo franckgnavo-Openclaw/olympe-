@@ -4,176 +4,163 @@ import { prisma } from "@/lib/prisma";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// Distance mappings from common French race labels
-const DISTANCE_MAP: Record<string, number> = {
-  "5 km": 5, "5km": 5,
-  "10 km": 10, "10km": 10,
-  "semi-marathon": 21.1, "semi marathon": 21.1, "21 km": 21.1, "21km": 21.1,
-  "marathon": 42.195, "42 km": 42.2, "42km": 42.2,
-  "trail": 20, // default trail distance
+const FRENCH_MONTHS: Record<string, string> = {
+  janvier: "01", février: "02", mars: "03", avril: "04",
+  mai: "05", juin: "06", juillet: "07", août: "08",
+  septembre: "09", octobre: "10", novembre: "11", décembre: "12",
 };
 
-function parseDistance(label: string): number {
-  const lower = label.toLowerCase();
-  for (const [key, val] of Object.entries(DISTANCE_MAP)) {
-    if (lower.includes(key)) return val;
-  }
-  // Try to extract a number like "15 km" or "15km"
-  const m = lower.match(/(\d+[\.,]?\d*)\s*km/);
+const MONTH_SLUGS = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+];
+
+// "17 juin 2026" or "1 - 5 juillet 2026" → Date (first date)
+function parseOlenoDate(str: string): Date | null {
+  const m = str.trim().match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+  if (!m) return null;
+  const month = FRENCH_MONTHS[m[2].toLowerCase()];
+  if (!month) return null;
+  return new Date(`${m[3]}-${month}-${m[1].padStart(2, "0")}T09:00:00`);
+}
+
+// "10 km" or "12.8 km" → number
+function parseKm(str: string): number {
+  const m = str.match(/(\d+[\.,]?\d*)\s*km/i);
   if (m) return parseFloat(m[1].replace(",", "."));
   return 0;
 }
 
-function parseDate(str: string): Date | null {
-  // Formats: "15/06/2025", "15-06-2025", "2025-06-15"
-  const clean = str.trim();
-  let m = clean.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T09:00:00`);
-  m = clean.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T09:00:00`);
-  m = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T09:00:00`);
-  const d = new Date(clean);
-  return isNaN(d.getTime()) ? null : d;
+// "Montlebon, Doubs (25)" → { city, department }
+function parseLieu(str: string): { city: string; department: string } {
+  const m = str.match(/^(.+?),\s*.+?\((\d{2,3})\)$/);
+  if (m) return { city: m[1].trim(), department: m[2] };
+  return { city: str.split(",")[0].trim(), department: "" };
 }
 
-function slugify(name: string, city: string, date: string): string {
-  return `cp-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 40)}-${city.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 20)}-${date}`;
+function slugify(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 }
 
-async function scrapeCourseAPied(): Promise<number> {
-  // courseapied.net calendar page — public, no auth required
-  const BASE = "https://www.courseapied.net";
+async function fetchPage(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,*/*",
+      "Accept-Language": "fr-FR,fr;q=0.9",
+    },
+    signal: AbortSignal.timeout(15000),
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+interface RaceData {
+  externalId: string;
+  name: string;
+  date: Date;
+  city: string;
+  department: string | null;
+  distanceKm: number;
+  registrationUrl: string | null;
+  source: string;
+}
+
+function parseRaces(html: string, baseUrl: string): RaceData[] {
+  const $ = cheerio.load(html);
+  const races: RaceData[] = [];
+
+  $("a[href^='/courses/']").each((_i, el) => {
+    const href = $(el).attr("href") ?? "";
+    const name = $(el).find("h3").text().trim();
+    if (!name) return;
+
+    const spans = $(el).find("span").map((_j, s) => $(s).text().trim()).get();
+    // Last span is location "City, Dept (code)"
+    const lieuSpan = spans[spans.length - 1] ?? "";
+    // Find date span (contains a year like 2026 or 2027)
+    const dateSpan = spans.find(s => /\d{4}/.test(s) && /\w+/.test(s)) ?? "";
+    // Find first distance span
+    const distSpan = spans.find(s => /\d+[\.,]?\d*\s*km/i.test(s)) ?? "";
+
+    const date = parseOlenoDate(dateSpan);
+    if (!date || date < new Date(Date.now() - 86400000)) return;
+
+    const { city, department } = parseLieu(lieuSpan);
+    if (!city) return;
+
+    const distanceKm = parseKm(distSpan);
+    const registrationUrl = `https://oleno.fr${href}`;
+    const externalId = `oleno-${slugify(name)}-${slugify(city)}-${date.toISOString().split("T")[0]}`;
+
+    races.push({ externalId, name, date, city, department: department || null, distanceKm, registrationUrl, source: "oleno" });
+    void baseUrl;
+  });
+
+  return races;
+}
+
+async function scrapeOleno(): Promise<number> {
   const now = new Date();
-  const months = [
-    `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`,
-    `${now.getFullYear()}/${String(now.getMonth() + 2).padStart(2, "0")}`,
-    `${now.getFullYear()}/${String(now.getMonth() + 3).padStart(2, "0")}`,
-  ].map(m => m.replace("/13", "/01").replace("/14", "/02")); // handle December edge case
+  const monthsToScrape: string[] = [];
 
-  let upserted = 0;
+  // Build list of next 6 months as "mois-année"
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const slug = MONTH_SLUGS[d.getMonth()];
+    monthsToScrape.push(`${slug}-${d.getFullYear()}`);
+  }
 
-  for (const monthPath of months) {
+  let total = 0;
+
+  for (const monthSlug of monthsToScrape) {
+    const url = `https://oleno.fr/course-a-pied/calendrier/${monthSlug}`;
     try {
-      const url = `${BASE}/calendrier/${monthPath}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; OlympeBot/1.0)" },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!res.ok) continue;
+      const html = await fetchPage(url);
+      const races = parseRaces(html, url);
 
-      const html = await res.text();
-      const $ = cheerio.load(html);
-
-      // courseapied.net lists races in table rows with class "course"
-      $("tr.course, .liste-courses tr, table.calendrier tr").each((_, el) => {
-        const cells = $(el).find("td");
-        if (cells.length < 3) return;
-
-        const dateStr = $(cells[0]).text().trim();
-        const nameEl = $(cells[1]);
-        const name = nameEl.find("a").first().text().trim() || nameEl.text().trim();
-        const href = nameEl.find("a").first().attr("href") ?? "";
-        const cityRaw = $(cells[2]).text().trim();
-        const distLabel = $(cells[3] ?? cells[2]).text().trim();
-
-        const date = parseDate(dateStr);
-        if (!date || !name || date < new Date()) return;
-
-        const distanceKm = parseDistance(distLabel || name);
-        if (distanceKm === 0) return;
-
-        const city = cityRaw.replace(/\(\d+\)/, "").trim();
-        const deptMatch = cityRaw.match(/\((\d{2,3})\)/);
-        const department = deptMatch ? deptMatch[1] : undefined;
-        const registrationUrl = href.startsWith("http") ? href : href ? `${BASE}${href}` : undefined;
-
-        const externalId = slugify(name, city, date.toISOString().split("T")[0]);
-
+      // Upsert all races in parallel
+      await Promise.all(races.map(r =>
         prisma.race.upsert({
-          where: { externalId },
-          update: { name, date, city, department, distanceKm, registrationUrl, updatedAt: new Date() },
-          create: { externalId, name, date, city, department: department ?? null, distanceKm, registrationUrl: registrationUrl ?? null, source: "courseapied" },
-        }).catch(() => { /* skip duplicates */ });
+          where: { externalId: r.externalId },
+          update: {
+            name: r.name, date: r.date, city: r.city,
+            department: r.department, distanceKm: r.distanceKm,
+            registrationUrl: r.registrationUrl, updatedAt: new Date(),
+          },
+          create: r,
+        }).catch(() => { })
+      ));
 
-        upserted++;
-      });
-
-      // Small delay to be polite
-      await new Promise(r => setTimeout(r, 500));
+      total += races.length;
     } catch {
-      // Continue to next month if one fails
+      // Skip failed months
     }
+
+    await new Promise(r => setTimeout(r, 500));
   }
 
-  return upserted;
-}
-
-async function scrapeRunningCalendar(): Promise<number> {
-  // runagain.fr — alternative French race aggregator
-  const BASE = "https://www.runagain.fr";
-  let upserted = 0;
-
-  try {
-    const res = await fetch(`${BASE}/calendrier-courses-a-pied`, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; OlympeBot/1.0)" },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) return 0;
-
-    const html = await res.text();
-    const $ = cheerio.load(html);
-
-    $(".event-item, .course-item, article.event").each((_, el) => {
-      const name = $(el).find(".event-title, .course-name, h3, h2").first().text().trim();
-      const dateStr = $(el).find(".event-date, .date, time").first().text().trim();
-      const city = $(el).find(".event-city, .ville, .location").first().text().trim();
-      const distLabel = $(el).find(".distance, .km").first().text().trim();
-      const href = $(el).find("a").first().attr("href") ?? "";
-
-      const date = parseDate(dateStr);
-      if (!date || !name || !city || date < new Date()) return;
-
-      const distanceKm = parseDistance(distLabel || name);
-      if (distanceKm === 0) return;
-
-      const registrationUrl = href.startsWith("http") ? href : href ? `${BASE}${href}` : undefined;
-      const externalId = slugify(name, city, date.toISOString().split("T")[0]);
-
-      prisma.race.upsert({
-        where: { externalId },
-        update: { name, date, city, distanceKm, registrationUrl, updatedAt: new Date() },
-        create: { externalId, name, date, city, distanceKm, registrationUrl: registrationUrl ?? null, source: "runagain" },
-      }).catch(() => { });
-
-      upserted++;
-    });
-  } catch {
-    // Silently skip if this source fails
-  }
-
-  return upserted;
+  return total;
 }
 
 export async function GET(req: NextRequest) {
-  // Protect the cron endpoint
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const [n1, n2] = await Promise.all([
-      scrapeCourseAPied(),
-      scrapeRunningCalendar(),
-    ]);
+    const scraped = await scrapeOleno();
 
     // Clean up past races older than 30 days
     await prisma.race.deleteMany({
       where: { date: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
     });
 
-    return NextResponse.json({ ok: true, scraped: n1 + n2, sources: { courseapied: n1, runagain: n2 } });
+    const total = await prisma.race.count();
+    return NextResponse.json({ ok: true, scraped, total });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
