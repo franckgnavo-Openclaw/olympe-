@@ -33,11 +33,11 @@ export async function GET() {
 
   // First <tr> content sample
   const firstRows: string[] = [];
-  $("tr").slice(0, 5).each((_, el) => firstRows.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)));
+  $("tr").slice(0, 5).each((_i, el) => { firstRows.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)); return true; });
 
   // First <li> content sample
   const firstLis: string[] = [];
-  $("li").slice(0, 5).each((_, el) => firstLis.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)));
+  $("li").slice(0, 5).each((_i, el) => { firstLis.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)); return true; });
 
   // Find all links containing "course" or "run" or a date pattern
   const raceLinks: string[] = [];
