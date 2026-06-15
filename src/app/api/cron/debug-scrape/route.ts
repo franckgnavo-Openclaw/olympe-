@@ -42,15 +42,31 @@ export async function GET() {
       return true;
     });
 
+    // Get full HTML of first course card
+    let fullCardHtml = "";
+    $("a[href^='/courses/']").first().each((_i, el) => {
+      fullCardHtml = $.html(el);
+      return true;
+    });
+
+    // Simulate parseRaces logic on first card
+    let parsedDebug: Record<string, unknown> = {};
+    $("a[href^='/courses/']").first().each((_i, el) => {
+      const name = $(el).find("h3").text().trim();
+      const spans = $(el).find("span").map((_j, s) => $(s).text().trim()).get();
+      const h3s = $(el).find("h3").map((_j, s) => $(s).text().trim()).get();
+      const h2s = $(el).find("h2").map((_j, s) => $(s).text().trim()).get();
+      const ps = $(el).find("p").map((_j, s) => $(s).text().trim()).get();
+      parsedDebug = { name, spans, h3s, h2s, ps };
+      return true;
+    });
+
     return NextResponse.json({
       status: res.status,
       htmlLength: html.length,
       courseLinks,
-      allLinks,
-      cards,
-      courseHrefs: courseHrefs.slice(0, 10),
-      firstCourseHtml,
-      bodySnippet,
+      parsedDebug,
+      fullCardHtml: fullCardHtml.slice(0, 3000),
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) });
