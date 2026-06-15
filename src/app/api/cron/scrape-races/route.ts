@@ -68,7 +68,7 @@ interface RaceData {
   source: string;
 }
 
-function parseRaces(html: string, baseUrl: string): RaceData[] {
+function parseRaces(html: string): RaceData[] {
   const $ = cheerio.load(html);
   const races: RaceData[] = [];
 
@@ -77,18 +77,18 @@ function parseRaces(html: string, baseUrl: string): RaceData[] {
     const name = $(el).find("h3").text().trim();
     if (!name) return;
 
-    const spans = $(el).find("span").map((_j, s) => $(s).text().trim()).get();
-    // Last span is location "City, Dept (code)"
-    const lieuSpan = spans[spans.length - 1] ?? "";
-    // Find date span (contains a year like 2026 or 2027)
-    const dateSpan = spans.find(s => /\d{4}/.test(s) && /\w+/.test(s)) ?? "";
-    // Find first distance span
-    const distSpan = spans.find(s => /\d+[\.,]?\d*\s*km/i.test(s)) ?? "";
+    // spans: type badge + distance badges
+    const distSpan = $(el).find("span").filter((_j, s) => /\d+[\.,]?\d*\s*km/i.test($(s).text())).first().text().trim();
 
-    const date = parseOlenoDate(dateSpan);
+    // p tags: p[0] = date, p[1] = location
+    const ps = $(el).find("p").map((_j, p) => $(p).text().replace(/\s+/g, " ").trim()).get();
+    const dateStr = ps.find(p => /\d{4}/.test(p)) ?? "";
+    const lieuStr = ps.find(p => /\(\d{2,3}\)/.test(p)) ?? "";
+
+    const date = parseOlenoDate(dateStr);
     if (!date || date < new Date(Date.now() - 86400000)) return;
 
-    const { city, department } = parseLieu(lieuSpan);
+    const { city, department } = parseLieu(lieuStr);
     if (!city) return;
 
     const distanceKm = parseKm(distSpan);
@@ -96,7 +96,6 @@ function parseRaces(html: string, baseUrl: string): RaceData[] {
     const externalId = `oleno-${slugify(name)}-${slugify(city)}-${date.toISOString().split("T")[0]}`;
 
     races.push({ externalId, name, date, city, department: department || null, distanceKm, registrationUrl, source: "oleno" });
-    void baseUrl;
   });
 
   return races;
@@ -119,7 +118,7 @@ async function scrapeOleno(): Promise<number> {
     const url = `https://oleno.fr/course-a-pied/calendrier/${monthSlug}`;
     try {
       const html = await fetchPage(url);
-      const races = parseRaces(html, url);
+      const races = parseRaces(html);
 
       // Upsert all races in parallel
       await Promise.all(races.map(r =>
