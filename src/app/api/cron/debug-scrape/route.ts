@@ -1,61 +1,64 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
+async function fetchHtml(url: string) {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,*/*",
+      "Accept-Language": "fr-FR,fr;q=0.9",
+    },
+    signal: AbortSignal.timeout(20000),
+    redirect: "follow",
+  });
+  return res.text();
+}
+
 export async function GET() {
-  const url = "https://www.athle.fr/base/calendrier";
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,*/*",
-        "Accept-Language": "fr-FR,fr;q=0.9",
-      },
-      signal: AbortSignal.timeout(20000),
-      redirect: "follow",
-    });
-    const html = await res.text();
-    const $ = cheerio.load(html);
+  const html = await fetchHtml("https://www.athle.fr/base/calendrier");
+  const $ = cheerio.load(html);
 
-    // Sample first 5 table rows with their HTML
-    const firstRows: string[] = [];
-    $("tr").slice(0, 10).each((_i, el) => {
-      firstRows.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200));
-      return true;
-    });
+  // Find race rows: tr with exactly 8 td children (Date, Libellé, Lieu, Type, Niveau, Label, Fiche, Résultats)
+  const raceRows: Array<Record<string, string>> = [];
+  const fichLinks: string[] = [];
 
-    // Look for links
-    const firstLinks: string[] = [];
-    $("a[href]").slice(0, 20).each((_i, el) => {
-      firstLinks.push($(el).attr("href") ?? "");
-      return true;
-    });
+  $("tr").each((_i, tr) => {
+    const tds = $(tr).find("td");
+    if (tds.length >= 6) {
+      const date = $(tds[0]).text().trim();
+      const name = $(tds[1]).text().trim();
+      const lieu = $(tds[2]).text().trim();
+      const type = $(tds[3]).text().trim();
+      const niveau = $(tds[4]).text().trim();
+      // Fiche link (td index 6 usually)
+      const ficheLink = $(tds[6]).find("a").attr("href") ?? $(tds[5]).find("a").attr("href") ?? "";
+      if (date && name && /\d{1,2}\s+\w+/.test(date)) {
+        raceRows.push({ date, name, lieu, type, niveau, ficheLink });
+        if (ficheLink) fichLinks.push(ficheLink);
+      }
+    }
+    return true;
+  });
 
-    // Table headers
-    const headers: string[] = [];
-    $("th").slice(0, 20).each((_i, el) => {
-      headers.push($(el).text().trim());
-      return true;
-    });
-
-    // Sample specific td content
-    const tdSamples: string[] = [];
-    $("td").slice(0, 30).each((_i, el) => {
-      const t = $(el).text().trim();
-      if (t) tdSamples.push(t.slice(0, 80));
-      return true;
-    });
-
-    return NextResponse.json({
-      status: res.status,
-      htmlLength: html.length,
-      tables: $("table").length,
-      rows: $("tr").length,
-      headers,
-      firstRows,
-      tdSamples,
-      firstLinks,
-    });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) });
+  // Fetch first fiche page to see if distance is there
+  let ficheExample: Record<string, unknown> = {};
+  if (fichLinks[0]) {
+    try {
+      const ficheUrl = fichLinks[0].startsWith("http") ? fichLinks[0] : `https://www.athle.fr${fichLinks[0]}`;
+      const ficheHtml = await fetchHtml(ficheUrl);
+      const $f = cheerio.load(ficheHtml);
+      ficheExample = {
+        url: ficheUrl,
+        bodyText: $f("body").text().replace(/\s+/g, " ").trim().slice(0, 800),
+      };
+    } catch (e) {
+      ficheExample = { error: String(e) };
+    }
   }
+
+  return NextResponse.json({
+    totalRaceRows: raceRows.length,
+    sample: raceRows.slice(0, 5),
+    ficheExample,
+  });
 }
