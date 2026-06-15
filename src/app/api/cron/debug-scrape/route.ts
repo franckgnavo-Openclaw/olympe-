@@ -1,66 +1,60 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
+async function probe(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36", "Accept": "text/html,application/xhtml+xml,application/json,*/*" },
+      signal: AbortSignal.timeout(10000),
+      redirect: "follow",
+    });
+    const text = await res.text();
+    const $ = cheerio.load(text);
+
+    // Count meaningful content elements
+    const links = $("a[href]").length;
+    const tables = $("table").length;
+    const lis = $("li").length;
+
+    // Sample of visible text
+    const bodyText = $("body").text().replace(/\s+/g, " ").trim().slice(0, 500);
+
+    return { status: res.status, htmlLength: text.length, links, tables, lis, bodyText };
+  } catch (e) {
+    return { status: 0, htmlLength: 0, links: 0, tables: 0, lis: 0, bodyText: String(e) };
+  }
+}
+
 export async function GET() {
-  const url = "https://www.klikego.com/resultats/calendrier/1";
+  const candidates: Record<string, string> = {
+    // FFA officiel
+    "ffa_calendar": "https://bases.athle.fr/asp.net/liste.aspx?frmpostback=true&frmbase=calendrier&frmmode=1&frmespace=0",
+    // Finishers.com
+    "finishers": "https://www.finishers.com/fr/agenda",
+    "finishers_json": "https://api.finishers.com/v1/events?country=FR&limit=20",
+    // BeRun
+    "berun": "https://www.berun.fr/calendrier",
+    // Maracourses
+    "maracourses": "https://www.maracourses.com/calendrier.html",
+    // Running Heroes
+    "runningheroes": "https://www.runningheroes.com/fr/challenges",
+    // OpenAgenda (free API)
+    "openagenda": "https://api.openagenda.com/v2/agendas/52611938/events?size=20&relative[]=current&relative[]=upcoming",
+    // Jogging-Plus
+    "joggingplus": "https://www.jogging-plus.com/calendrier-courses.html",
+    // Time to Run
+    "timetorun": "https://www.time-to-run.com/calendrier/",
+    // Klikego JSON guess
+    "klikego_json": "https://www.klikego.com/api/calendrier",
+    "klikego_ajax": "https://www.klikego.com/ajax/calendar",
+    "klikego_events": "https://www.klikego.com/evenements/france",
+  };
 
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36" },
-    signal: AbortSignal.timeout(15000),
-  });
-  const html = await res.text();
-  const $ = cheerio.load(html);
+  const results: Record<string, unknown> = {};
+  for (const [key, url] of Object.entries(candidates)) {
+    results[key] = await probe(url);
+    await new Promise(r => setTimeout(r, 200));
+  }
 
-  // Count hits for likely selectors
-  const selectors = [
-    "tr", "table", "li", "article",
-    "[class*='event']", "[class*='race']", "[class*='course']", "[class*='cal']",
-    "[class*='result']", "[class*='item']", "[class*='row']", "[class*='card']",
-    ".event", ".race", ".item", ".row", ".card", ".course",
-  ];
-  const selectorHits: Record<string, number> = {};
-  for (const s of selectors) selectorHits[s] = $(s).length;
-
-  // Top 40 class names in the page
-  const classCounts: Record<string, number> = {};
-  $("[class]").each((_, el) => {
-    const classes = ($(el).attr("class") ?? "").split(/\s+/).filter(Boolean);
-    for (const c of classes) {
-      classCounts[c] = (classCounts[c] ?? 0) + 1;
-    }
-  });
-  const topClasses = Object.entries(classCounts).sort((a, b) => b[1] - a[1]).slice(0, 40);
-
-  // First <tr> content sample
-  const firstRows: string[] = [];
-  $("tr").slice(0, 5).each((_i, el) => { firstRows.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)); return true; });
-
-  // First <li> content sample
-  const firstLis: string[] = [];
-  $("li").slice(0, 5).each((_i, el) => { firstLis.push($(el).text().replace(/\s+/g, " ").trim().slice(0, 200)); return true; });
-
-  // Find all links containing "course" or "run" or a date pattern
-  const raceLinks: string[] = [];
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href") ?? "";
-    const text = $(el).text().trim().slice(0, 100);
-    if (href.match(/course|race|event|calend|inscri/i) || text.match(/\d{2}\/\d{2}\/\d{4}/)) {
-      raceLinks.push(`${text} → ${href}`);
-    }
-  });
-
-  // Raw HTML middle section (more likely to contain data than the header)
-  const htmlMiddle = html.slice(3000, 7000);
-
-  return NextResponse.json({
-    status: res.status,
-    htmlLength: html.length,
-    selectorHits,
-    topClasses,
-    firstRows,
-    firstLis,
-    raceLinksCount: raceLinks.length,
-    raceLinksSample: raceLinks.slice(0, 20),
-    htmlMiddle,
-  });
+  return NextResponse.json(results);
 }
