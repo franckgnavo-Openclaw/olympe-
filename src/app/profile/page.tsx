@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { RuneBar } from "@/components/ui/RuneBar";
 import { GlowButton } from "@/components/ui/GlowButton";
+import { Spinner } from "@/components/ui/Spinner";
 import { BadgeTree } from "@/components/BadgeTree";
 import { WeeklyKmChart } from "@/components/WeeklyKmChart";
 import { getLevel } from "@/lib/points";
@@ -34,6 +35,7 @@ export default function ProfilePage() {
   const [earnedBadges, setEarnedBadges] = useState<UserBadge[]>([]);
   const [programSessions, setProgramSessions] = useState<{ day: number; completedAt: string | null }[]>([]);
   const [runs, setRuns] = useState<{ date: string; distanceKm: number }[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
@@ -41,21 +43,19 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetch("/api/stats").then((r) => r.ok ? r.json() : null).then((d) => d && setStats(d));
-      fetch("/api/badges").then((r) => r.ok ? r.json() : []).then(setEarnedBadges);
-      fetch("/api/program").then((r) => r.ok ? r.json() : []).then((sessions: { day: number; completedAt: string | null; completed: boolean }[]) =>
-        setProgramSessions(sessions.filter(s => s.completed).map(s => ({ day: s.day, completedAt: s.completedAt })))
-      );
-      fetch("/api/runs").then((r) => r.ok ? r.json() : []).then((data: { date: string; distanceKm: number }[]) => setRuns(data));
+      setDataLoading(true);
+      Promise.all([
+        fetch("/api/stats").then(r => r.ok ? r.json() : null).then(d => d && setStats(d)),
+        fetch("/api/badges").then(r => r.ok ? r.json() : []).then(setEarnedBadges),
+        fetch("/api/program").then(r => r.ok ? r.json() : []).then((sessions: { day: number; completedAt: string | null; completed: boolean }[]) =>
+          setProgramSessions(sessions.filter(s => s.completed).map(s => ({ day: s.day, completedAt: s.completedAt })))
+        ),
+        fetch("/api/runs").then(r => r.ok ? r.json() : []).then((data: { date: string; distanceKm: number }[]) => setRuns(data)),
+      ]).finally(() => setDataLoading(false));
     }
   }, [status]);
 
-  if (!session) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-        style={{ width: 32, height: 32, border: "2px solid var(--border2)", borderTopColor: "var(--gold)", borderRadius: "50%" }} />
-    </div>
-  );
+  if (!session) return <Spinner fullPage />;
 
   const levelInfo = stats ? getLevel(stats.totalPoints) : null;
   const earnedSlugs = new Set(earnedBadges.map((b) => b.badge.slug));
@@ -140,6 +140,9 @@ export default function ProfilePage() {
               )}
             </div>
           </motion.div>
+
+          {/* Data loading */}
+          {dataLoading && <Spinner fullPage label="INVOCATION" />}
 
           {/* XP bar */}
           {stats && levelInfo && (

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getLevel } from "@/lib/points";
 import { checkAndAwardBadges, checkAndRevokeBadges } from "@/lib/badges";
+import { computeStreaks } from "@/lib/streaks";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -82,23 +83,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const newTotalPoints = allRuns.reduce((s, r) => s + r.pointsEarned, 0);
   const { level: newLevel } = getLevel(newTotalPoints);
 
-  // Recompute streak
-  const getWeekStart = (d: Date) => {
-    const w = new Date(d); const day = w.getDay();
-    w.setDate(w.getDate() - (day === 0 ? 6 : day - 1)); w.setHours(0, 0, 0, 0);
-    return w.getTime();
-  };
-  const weekSet = new Set(allRuns.map(r => getWeekStart(new Date(r.date))));
-  const weekKeys = Array.from(weekSet).sort((a, b) => a - b);
-  const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-  let longestStreak = 0, curStreak = 0;
-  for (let i = 0; i < weekKeys.length; i++) {
-    curStreak = (i === 0 || weekKeys[i] - weekKeys[i - 1] > ONE_WEEK) ? 1 : curStreak + 1;
-    longestStreak = Math.max(longestStreak, curStreak);
-  }
-  const thisWeek = getWeekStart(new Date());
-  const lastRunWeek = weekKeys[weekKeys.length - 1] ?? 0;
-  const currentStreak = lastRunWeek >= thisWeek - ONE_WEEK ? curStreak : 0;
+  // Recompute streak from all runs
+  const { currentStreak, longestStreak } = computeStreaks(allRuns.map(r => new Date(r.date)));
 
   // ── 4. Badge revocation ──────────────────────────────────────────────────────
   const revokedBadges = await checkAndRevokeBadges(session.user.id, newTotalPoints, newLevel);
@@ -107,13 +93,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const totalKm = allRuns.reduce((s, r) => s + r.distanceKm, 0);
   const pace = newDurationMin / newDistanceKm;
   const runDate = new Date(newDate);
-  const weekStart = getWeekStart(runDate);
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const getWS = (d: Date) => { const w = new Date(d); const day = w.getDay(); w.setDate(w.getDate() - (day === 0 ? 6 : day - 1)); w.setHours(0,0,0,0); return w.getTime(); };
+  const weekStart = getWS(runDate);
   const monthKey = `${runDate.getFullYear()}-${runDate.getMonth()}`;
-  const runsThisWeek = allRuns.filter(r => getWeekStart(new Date(r.date)) === weekStart).length;
+  const runsThisWeek = allRuns.filter(r => getWS(new Date(r.date)) === weekStart).length;
   const runsThisMonth = allRuns.filter(r => {
     const d = new Date(r.date);
     return `${d.getFullYear()}-${d.getMonth()}` === monthKey;
   }).length;
+  void ONE_WEEK_MS;
 
   const newBadges = await checkAndAwardBadges({
     userId: session.user.id,
@@ -159,29 +148,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { level: newLevel } = getLevel(newTotalPoints);
 
   // ── Recompute weekly streak ─────────────────────────────────────────────────
-  const getWeekStart = (d: Date) => {
-    const w = new Date(d);
-    const day = w.getDay();
-    w.setDate(w.getDate() - (day === 0 ? 6 : day - 1));
-    w.setHours(0, 0, 0, 0);
-    return w.getTime();
-  };
-
-  const weekSet = new Set(allRuns.map(r => getWeekStart(new Date(r.date))));
-  const weekKeys = Array.from(weekSet).sort((a, b) => a - b);
-  const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-
-  let longestStreak = 0;
-  let curStreak = 0;
-  for (let i = 0; i < weekKeys.length; i++) {
-    if (i === 0 || weekKeys[i] - weekKeys[i - 1] > ONE_WEEK) curStreak = 1;
-    else curStreak++;
-    longestStreak = Math.max(longestStreak, curStreak);
-  }
-
-  const thisWeek = getWeekStart(new Date());
-  const lastRunWeek = weekKeys[weekKeys.length - 1] ?? 0;
-  const currentStreak = lastRunWeek >= thisWeek - ONE_WEEK ? curStreak : 0;
+  const { currentStreak, longestStreak } = computeStreaks(allRuns.map(r => new Date(r.date)));
 
   // ── Revoke badges no longer valid ──────────────────────────────────────────
   const revokedBadges = await checkAndRevokeBadges(session.user.id, newTotalPoints, newLevel);

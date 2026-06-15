@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { GameModal } from "@/components/ui/GameModal";
+import { Spinner } from "@/components/ui/Spinner";
 import { RunSuccessModal, RunSuccessResult } from "@/components/RunSuccessModal";
 import { SESSIONS, TYPE_META, WEEK_DURATIONS, SessionType, ProgramSession } from "@/lib/program";
 
@@ -178,6 +179,7 @@ export default function ProgramPage() {
   const [modalPaceSec, setModalPaceSec] = useState("");
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
+  const [initialLoading, setInitialLoading] = useState(true);
   const [showCompletion, setShowCompletion] = useState(false);
   const [runSuccess, setRunSuccess] = useState<RunSuccessResult | null>(null);
 
@@ -187,7 +189,11 @@ export default function ProgramPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetch("/api/program").then(r => r.json()).then(setUserSessions);
+      setInitialLoading(true);
+      fetch("/api/program")
+        .then(r => r.json())
+        .then(setUserSessions)
+        .finally(() => setInitialLoading(false));
     }
   }, [status]);
 
@@ -377,6 +383,9 @@ export default function ProgramPage() {
               </p>
             </div>
           </motion.div>
+
+          {/* Initial loading */}
+          {initialLoading && <Spinner fullPage label="INVOCATION" />}
 
           {/* Week tabs */}
           <div style={{ display: "flex", gap: 4, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>

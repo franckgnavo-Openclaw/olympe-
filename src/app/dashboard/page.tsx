@@ -10,6 +10,7 @@ import { NavBar } from "@/components/NavBar";
 import { RuneBar } from "@/components/ui/RuneBar";
 import { StatCard } from "@/components/ui/StatCard";
 import { GlowButton } from "@/components/ui/GlowButton";
+import { Spinner } from "@/components/ui/Spinner";
 import { getLevel } from "@/lib/points";
 
 interface Run {
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [showAddRun, setShowAddRun] = useState(false);
   const [showAllRuns, setShowAllRuns] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
@@ -51,38 +53,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetchRuns();
-      fetchStats();
+      setDataLoading(true);
+      Promise.all([
+        fetch("/api/runs").then(r => r.ok ? r.json() : []).then(setRuns),
+        fetch("/api/stats").then(r => r.ok ? r.json() : null).then(d => d && setStats(d)),
+      ]).finally(() => setDataLoading(false));
     }
   }, [status]);
 
-  async function fetchRuns() {
-    const res = await fetch("/api/runs");
-    if (res.ok) setRuns(await res.json());
-  }
-
-  async function fetchStats() {
-    const res = await fetch("/api/stats");
-    if (res.ok) setStats(await res.json());
-  }
-
   function onRunAdded() {
-    fetchRuns();
-    fetchStats();
+    Promise.all([
+      fetch("/api/runs").then(r => r.ok ? r.json() : []).then(setRuns),
+      fetch("/api/stats").then(r => r.ok ? r.json() : null).then(d => d && setStats(d)),
+    ]);
     setShowAddRun(false);
   }
 
   if (status === "loading" || !session) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          style={{ width: 32, height: 32, border: "2px solid var(--border2)", borderTopColor: "var(--gold)", borderRadius: "50%" }}
-        />
-        <span style={{ color: "var(--muted)", fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: "0.1em" }}>CHARGEMENT</span>
-      </div>
-    );
+    return <Spinner fullPage />;
   }
 
   const levelInfo = stats ? getLevel(stats.totalPoints) : null;
@@ -137,6 +125,9 @@ export default function DashboardPage() {
               </p>
             )}
           </motion.div>
+
+          {/* Data loading */}
+          {dataLoading && <Spinner fullPage label="INVOCATION" />}
 
           {/* Streak banner */}
           <AnimatePresence>

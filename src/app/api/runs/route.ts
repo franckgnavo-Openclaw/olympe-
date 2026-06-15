@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateRunPoints, getLevel } from "@/lib/points";
 import { checkAndAwardBadges } from "@/lib/badges";
+import { computeStreaks } from "@/lib/streaks";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -45,71 +46,25 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
-  // Personal record = meilleure distance sur un seul run
-  const bestRun = await prisma.run.findFirst({
-    where: { userId: user.id },
-    orderBy: { distanceKm: "desc" },
-  });
-  const isPersonalRecord = !bestRun || parseFloat(distanceKm) > bestRun.distanceKm;
-
-  // Streak hebdomadaire (lundi → dimanche)
-  const getWeekStart = (d: Date) => {
-    const date = new Date(d);
-    const day = date.getDay();
-    date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
-    date.setHours(0, 0, 0, 0);
-    return date;
-  };
-
-  const thisWeekStart = getWeekStart(new Date());
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-
-  let newStreak: number;
-  if (!user.lastRunDate) {
-    newStreak = 1;
-  } else {
-    const lastRunWeekStart = getWeekStart(user.lastRunDate);
-    if (lastRunWeekStart.getTime() === thisWeekStart.getTime()) {
-      newStreak = user.currentStreak;
-    } else if (lastRunWeekStart.getTime() === lastWeekStart.getTime()) {
-      newStreak = user.currentStreak + 1;
-    } else {
-      newStreak = 1;
-    }
-  }
-
   const parsedDistance = parseFloat(distanceKm);
   const parsedDuration = parseInt(durationMin);
   const pace = parsedDuration / parsedDistance; // min/km
 
-  const points = calculateRunPoints(parsedDistance, isPersonalRecord, newStreak, !!isProgramRun);
+  // Personal record = meilleure distance sur un seul run (parmi les runs existants)
+  const bestRun = await prisma.run.findFirst({
+    where: { userId: user.id },
+    orderBy: { distanceKm: "desc" },
+  });
+  const isPersonalRecord = !bestRun || parsedDistance > bestRun.distanceKm;
+
+  // Points (streak provisoire basé sur l'état actuel, corrigé après création)
+  const points = calculateRunPoints(parsedDistance, isPersonalRecord, user.currentStreak, !!isProgramRun);
   const newTotalPoints = user.totalPoints + points;
   const { level } = getLevel(newTotalPoints);
 
-  // Runs cette semaine
-  const monday = new Date();
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  const runsThisWeek = await prisma.run.count({
-    where: { userId: user.id, date: { gte: monday } },
-  });
-
-  // Runs ce mois
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const runsThisMonth = await prisma.run.count({
-    where: { userId: user.id, date: { gte: monthStart } },
-  });
-
-  // Total km cumulés (incluant ce run)
-  const kmAgg = await prisma.run.aggregate({
-    where: { userId: user.id },
-    _sum: { distanceKm: true },
-  });
-  const totalKm = (kmAgg._sum.distanceKm ?? 0) + parsedDistance;
-  const totalRuns = (bestRun ? await prisma.run.count({ where: { userId: user.id } }) : 0) + 1;
+  const daysSinceLastRun = user.lastRunDate
+    ? Math.floor((Date.now() - new Date(user.lastRunDate).getTime()) / (1000 * 60 * 60 * 24))
+    : null;
 
   // Créer le run
   const run = await prisma.run.create({
@@ -126,6 +81,24 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Recalculer le streak depuis TOUS les runs (y compris celui qui vient d'être créé)
+  const allRuns = await prisma.run.findMany({ where: { userId: user.id }, select: { date: true } });
+  const { currentStreak: newStreak, longestStreak: newLongest } = computeStreaks(allRuns.map(r => new Date(r.date)));
+
+  // Runs cette semaine et ce mois (date du run entré, pas aujourd'hui)
+  const runDate = new Date(date);
+  const monday = new Date(runDate);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  const monthStart = new Date(runDate.getFullYear(), runDate.getMonth(), 1);
+
+  const runsThisWeek = allRuns.filter(r => new Date(r.date) >= monday).length;
+  const runsThisMonth = allRuns.filter(r => new Date(r.date) >= monthStart).length;
+
+  const totalKmAgg = await prisma.run.aggregate({ where: { userId: user.id }, _sum: { distanceKm: true } });
+  const totalKmReal = totalKmAgg._sum.distanceKm ?? 0;
+  const totalRuns = allRuns.length;
+
   // Mettre à jour les stats user
   await prisma.user.update({
     where: { id: user.id },
@@ -133,24 +106,20 @@ export async function POST(req: NextRequest) {
       totalPoints: newTotalPoints,
       level,
       currentStreak: newStreak,
-      longestStreak: Math.max(user.longestStreak, newStreak),
-      lastRunDate: new Date(),
+      longestStreak: Math.max(user.longestStreak, newLongest),
+      lastRunDate: new Date(date),
     },
   });
-
-  const daysSinceLastRun = user.lastRunDate
-    ? Math.floor((Date.now() - new Date(user.lastRunDate).getTime()) / (1000 * 60 * 60 * 24))
-    : null;
 
   // Vérifier et attribuer les badges
   const newBadges = await checkAndAwardBadges({
     userId: user.id,
     isPersonalRecord,
     newStreak,
-    totalKm,
+    totalKm: totalKmReal,
     totalRuns,
-    runsThisWeek: runsThisWeek + 1,
-    runsThisMonth: runsThisMonth + 1,
+    runsThisWeek,
+    runsThisMonth,
     distanceKm: parsedDistance,
     durationMin: parsedDuration,
     pace,
