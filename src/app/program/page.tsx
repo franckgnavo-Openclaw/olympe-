@@ -8,7 +8,7 @@ import { NavBar } from "@/components/NavBar";
 import { GameModal } from "@/components/ui/GameModal";
 import { Spinner } from "@/components/ui/Spinner";
 import { RunSuccessModal, RunSuccessResult } from "@/components/RunSuccessModal";
-import { SESSIONS, TYPE_META, WEEK_DURATIONS, SessionType, ProgramSession } from "@/lib/program";
+import { PROGRAMS, PROGRAM_ID, TYPE_META, SessionType, ProgramSession } from "@/lib/program";
 
 interface UserSession {
   day: number;
@@ -19,7 +19,7 @@ interface UserSession {
   runId?: string | null;
 }
 
-const WEEKS = [1, 2, 3, 4, 5, 6, 7, 8];
+const PROGRAM_STORAGE_KEY = "olympe_selected_program";
 
 const RUN_TYPES: SessionType[] = ["Endurance", "Intervalles", "Récupération", "Compétition"];
 const isRunType = (t: SessionType) => RUN_TYPES.includes(t);
@@ -30,7 +30,7 @@ function getModalTitle(s: ProgramSession): string {
   if (s.type === "Endurance") return "Endurance";
   if (s.type === "Intervalles") return "Fractionné";
   if (s.type === "Récupération") return "Récupération active";
-  if (s.type === "Compétition") return "Course — 10 km !";
+  if (s.type === "Compétition") return `Course — ${s.description}`;
   return s.description;
 }
 
@@ -168,6 +168,8 @@ function FeelingStars({ value, onChange }: { value: number; onChange: (v: number
 export default function ProgramPage() {
   const { status } = useSession();
   const router = useRouter();
+  const [selectedProgramId, setSelectedProgramId] = useState<string>(PROGRAM_ID);
+  const [showProgramSelector, setShowProgramSelector] = useState(false);
   const [userSessions, setUserSessions] = useState<UserSession[]>([]);
   const [activeWeek, setActiveWeek] = useState(1);
   const [selected, setSelected] = useState<ProgramSession | null>(null);
@@ -183,6 +185,30 @@ export default function ProgramPage() {
   const [showCompletion, setShowCompletion] = useState(false);
   const [runSuccess, setRunSuccess] = useState<RunSuccessResult | null>(null);
 
+  const program = PROGRAMS[selectedProgramId] ?? PROGRAMS[PROGRAM_ID];
+  const SESSIONS = program.sessions;
+  const WEEK_DURATIONS = program.weekDurations;
+  const WEEKS = Array.from({ length: program.weeks }, (_, i) => i + 1);
+
+  // Restore selected program from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(PROGRAM_STORAGE_KEY);
+    if (saved && PROGRAMS[saved]) setSelectedProgramId(saved);
+  }, []);
+
+  function switchProgram(id: string) {
+    setSelectedProgramId(id);
+    localStorage.setItem(PROGRAM_STORAGE_KEY, id);
+    setShowProgramSelector(false);
+    setActiveWeek(1);
+    setUserSessions([]);
+    setInitialLoading(true);
+    fetch(`/api/program?programId=${id}`)
+      .then(r => r.json())
+      .then(setUserSessions)
+      .finally(() => setInitialLoading(false));
+  }
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
   }, [status, router]);
@@ -190,25 +216,25 @@ export default function ProgramPage() {
   useEffect(() => {
     if (status === "authenticated") {
       setInitialLoading(true);
-      fetch("/api/program")
+      fetch(`/api/program?programId=${selectedProgramId}`)
         .then(r => r.json())
         .then(setUserSessions)
         .finally(() => setInitialLoading(false));
     }
-  }, [status]);
+  }, [status, selectedProgramId]);
 
   // Find current week = first week with incomplete non-rest sessions
   useEffect(() => {
     const doneSet = new Set(userSessions.filter(s => s.completed).map(s => s.day));
-    for (let w = 1; w <= 8; w++) {
+    for (let w = 1; w <= program.weeks; w++) {
       const weekSessions = SESSIONS.filter(s => s.week === w && s.type !== "Repos");
       if (weekSessions.some(s => !doneSet.has(s.day))) {
         setActiveWeek(w);
         return;
       }
     }
-    setActiveWeek(8);
-  }, [userSessions]);
+    setActiveWeek(program.weeks);
+  }, [userSessions, SESSIONS, program.weeks]);
 
   const doneMap = new Map(userSessions.map(s => [s.day, s]));
 
@@ -302,6 +328,7 @@ export default function ProgramPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          programId: selectedProgramId,
           day: selected.day,
           completed,
           notes: modalNotes,
@@ -350,16 +377,63 @@ export default function ProgramPage() {
 
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 28 }}>
-            <p style={{ fontFamily: "'Cinzel', serif", fontSize: 10, color: "var(--muted)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 6 }}>
-              Route · Découverte
-            </p>
+            {/* Sélecteur de programme */}
+            <div style={{ position: "relative", marginBottom: 16 }}>
+              <button
+                onClick={() => setShowProgramSelector(v => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  padding: "8px 14px", cursor: "pointer", width: "100%",
+                  fontFamily: "'Cinzel', serif", fontSize: 11, color: "var(--gold)",
+                  letterSpacing: "0.12em", textTransform: "uppercase",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                  <rect x="9" y="3" width="6" height="4" rx="1"/>
+                </svg>
+                <span style={{ flex: 1, textAlign: "left" }}>{program.label}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              {showProgramSelector && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}>
+                  {Object.values(PROGRAMS).map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => switchProgram(p.id)}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "12px 14px", cursor: "pointer", border: "none",
+                        background: p.id === selectedProgramId ? "var(--surface3)" : "transparent",
+                        fontFamily: "'Cinzel', serif", fontSize: 11, letterSpacing: "0.08em",
+                        color: p.id === selectedProgramId ? "var(--gold)" : "var(--text)",
+                        borderBottom: "1px solid var(--border)",
+                      }}
+                    >
+                      {p.label}
+                      <span style={{ display: "block", fontSize: 9, color: "var(--muted)", marginTop: 2 }}>
+                        {p.weeks} semaines · {p.sessions.filter(s => s.type !== "Repos").length} séances
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <h1 style={{
-              fontFamily: "'Cinzel Decorative', serif", fontWeight: 700, fontSize: 24,
+              fontFamily: "'Cinzel Decorative', serif", fontWeight: 700, fontSize: 22,
               background: "linear-gradient(135deg, #c9a227, #f5d76e)",
               WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
               marginBottom: 16,
             }}>
-              PROGRAMME 10 KM
+              {program.label.toUpperCase()}
             </h1>
 
             {/* Global progress */}
@@ -379,7 +453,7 @@ export default function ProgramPage() {
                 />
               </div>
               <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
-                {completedCount} séances accomplies · 8 semaines · 56 jours
+                {completedCount} séances accomplies · {program.weeks} semaines · {SESSIONS.length} jours
               </p>
             </div>
           </motion.div>

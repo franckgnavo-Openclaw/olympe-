@@ -2,17 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PROGRAM_ID } from "@/lib/program";
+import { PROGRAMS, PROGRAM_ID } from "@/lib/program";
 import { checkAndAwardProgramBadges, checkAndRevokeBadges } from "@/lib/badges";
 import { PROGRAM_COMPLETION_BONUS, getLevel } from "@/lib/points";
 
 // GET — récupère toutes les sessions de l'utilisateur
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
+  const programId = req.nextUrl.searchParams.get("programId") ?? PROGRAM_ID;
+
   const sessions = await prisma.userProgramSession.findMany({
-    where: { userId: session.user.id, programId: PROGRAM_ID },
+    where: { userId: session.user.id, programId },
   });
 
   return NextResponse.json(sessions);
@@ -24,19 +26,24 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
   const body = await req.json();
+  const programId: string = body.programId ?? PROGRAM_ID;
+  const program = PROGRAMS[programId];
+  if (!program) return NextResponse.json({ error: "Programme invalide" }, { status: 400 });
+
   const day = parseInt(body.day);
   const completed: boolean = body.completed ?? true;
   const notes: string | undefined = body.notes;
   const feeling: number | undefined = body.feeling ? parseInt(body.feeling) : undefined;
   const runId: string | null | undefined = body.runId;
 
-  if (!day || day < 1 || day > 56) return NextResponse.json({ error: "Jour invalide" }, { status: 400 });
+  const maxDay = program.sessions.length;
+  if (!day || day < 1 || day > maxDay) return NextResponse.json({ error: "Jour invalide" }, { status: 400 });
 
   const result = await prisma.userProgramSession.upsert({
-    where: { userId_programId_day: { userId: session.user.id, programId: PROGRAM_ID, day } },
+    where: { userId_programId_day: { userId: session.user.id, programId, day } },
     create: {
       userId: session.user.id,
-      programId: PROGRAM_ID,
+      programId,
       day,
       completed,
       completedAt: completed ? new Date() : null,
