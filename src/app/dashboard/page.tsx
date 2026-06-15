@@ -258,7 +258,7 @@ export default function DashboardPage() {
               <StatCard label="Distance" value={stats.totalKm.toFixed(1)} unit="kilomètres" color="var(--gold)" delay={0.1} />
               <StatCard label="Runs" value={stats.totalRuns} unit="sorties" color="var(--gold-l)" delay={0.15} />
               <StatCard label="Points" value={stats.totalPoints.toLocaleString()} unit="pts de gloire" color="var(--gold)" delay={0.2} />
-              <StatCard label="Temps" value={Math.round(stats.totalMin / 60)} unit="heures au combat" color="var(--gold-l)" delay={0.25} />
+              <StatCard label="Temps" value={`${Math.floor(stats.totalMin / 60)}h${String(stats.totalMin % 60).padStart(2, "0")}`} unit="au combat" color="var(--gold-l)" delay={0.25} />
             </div>
           )}
 

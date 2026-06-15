@@ -174,6 +174,8 @@ export default function ProgramPage() {
   const [modalFeeling, setModalFeeling] = useState(0);
   const [modalDistance, setModalDistance] = useState("");
   const [modalDuration, setModalDuration] = useState("");
+  const [modalPaceMin, setModalPaceMin] = useState("");
+  const [modalPaceSec, setModalPaceSec] = useState("");
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
   const [showCompletion, setShowCompletion] = useState(false);
@@ -208,6 +210,15 @@ export default function ProgramPage() {
   const totalActive = SESSIONS.filter(s => s.type !== "Repos").length;
   const pct = Math.round((completedCount / totalActive) * 100);
 
+  // Recalcule la distance à partir de l'allure (min:sec/km) et de la durée
+  function recomputeModalDistance(pMin: string, pSec: string, dur: string) {
+    const m = parseInt(pMin) || 0;
+    const s = parseInt(pSec) || 0;
+    const t = parseFloat(dur);
+    const paceDec = m + s / 60;
+    setModalDistance(paceDec > 0 && t > 0 ? (t / paceDec).toFixed(2) : "");
+  }
+
   function openSession(s: ProgramSession) {
     if (s.type === "Repos") return;
     const existing = doneMap.get(s.day);
@@ -215,6 +226,8 @@ export default function ProgramPage() {
     setModalFeeling(existing?.feeling ?? 0);
     setModalDistance("");
     setModalDuration(s.durationMin ? String(s.durationMin) : "");
+    setModalPaceMin("");
+    setModalPaceSec("");
     setModalError("");
     setSelected(s);
   }
@@ -225,7 +238,7 @@ export default function ProgramPage() {
     if (completed && isRunType(selected.type)) {
       const dist = parseFloat(modalDistance);
       if (!modalDistance || dist <= 0) {
-        setModalError("Indique la distance parcourue (km) pour enregistrer la séance.");
+        setModalError("Indique l'allure (min/km) pour calculer la distance et enregistrer la séance.");
         return;
       }
     }
@@ -251,6 +264,7 @@ export default function ProgramPage() {
               distanceKm: dist,
               durationMin: dur,
               notes: modalNotes,
+              feeling: modalFeeling || undefined,
               isProgramRun: true,
             }),
           });
@@ -553,33 +567,54 @@ export default function ProgramPage() {
               return blocks.length > 0 ? <BlocksDetailed blocks={blocks} /> : null;
             })()}
 
-            {/* Distance + Durée — uniquement pour les séances de run */}
+            {/* Durée → Allure → Distance auto — uniquement pour les séances de run */}
             {isRunType(selected.type) && !selectedDone && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
-                    Distance (km) *
-                  </p>
-                  <input
-                    type="number" step="0.01" min="0.1"
-                    value={modalDistance}
-                    onChange={e => setModalDistance(e.target.value)}
-                    placeholder="5.0"
-                    className="game-input"
-                    style={{ width: "100%", padding: "8px 10px", background: "rgba(201,162,39,0.06)", border: "1px solid var(--gold)", color: "var(--text)", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" }}
-                  />
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Durée — pré-remplie, éditable */}
                 <div>
                   <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
-                    Durée (min)
+                    Durée (min){selected.durationMin ? " · pré-remplie" : ""}
                   </p>
                   <input
                     type="number" min="1"
                     value={modalDuration}
-                    onChange={e => setModalDuration(e.target.value)}
+                    onChange={e => { setModalDuration(e.target.value); recomputeModalDistance(modalPaceMin, modalPaceSec, e.target.value); }}
                     placeholder="30"
                     className="game-input"
-                    style={{ width: "100%", padding: "8px 10px", background: "rgba(201,162,39,0.04)", border: "1px solid #3d3020", color: "var(--text)", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" }}
+                    style={{ width: "100%", padding: "8px 10px", background: "rgba(201,162,39,0.04)", border: `1px solid ${selected.durationMin ? "var(--gold)" : "#3d3020"}`, color: "var(--text)", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" }}
+                  />
+                </div>
+                {/* Allure */}
+                <div>
+                  <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                    Allure (min/km) *
+                  </p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="number" min="0" max="59" value={modalPaceMin}
+                      onChange={e => { setModalPaceMin(e.target.value); recomputeModalDistance(e.target.value, modalPaceSec, modalDuration); }}
+                      placeholder="5" className="game-input"
+                      style={{ width: "100%", padding: "8px 10px", textAlign: "center", background: "rgba(201,162,39,0.06)", border: "1px solid var(--gold)", color: "var(--text)", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" }}
+                    />
+                    <span style={{ fontSize: 18, fontWeight: 700, color: "var(--gold)" }}>:</span>
+                    <input
+                      type="number" min="0" max="59" value={modalPaceSec}
+                      onChange={e => { setModalPaceSec(e.target.value); recomputeModalDistance(modalPaceMin, e.target.value, modalDuration); }}
+                      placeholder="30" className="game-input"
+                      style={{ width: "100%", padding: "8px 10px", textAlign: "center", background: "rgba(201,162,39,0.06)", border: "1px solid var(--gold)", color: "var(--text)", fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none" }}
+                    />
+                    <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'Cinzel', serif", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>MIN/KM</span>
+                  </div>
+                </div>
+                {/* Distance calculée */}
+                <div>
+                  <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                    Distance (km) · calculée
+                  </p>
+                  <input
+                    type="number" value={modalDistance} readOnly placeholder="—"
+                    className="game-input"
+                    style={{ width: "100%", padding: "8px 10px", background: "rgba(201,162,39,0.08)", border: "1px solid var(--gold)", color: "var(--gold)", fontWeight: 700, fontFamily: "'Inter', sans-serif", fontSize: 13, outline: "none", cursor: "default" }}
                   />
                 </div>
               </div>

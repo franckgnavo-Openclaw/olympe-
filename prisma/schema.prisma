@@ -81,6 +81,7 @@ model Run {
   distanceKm       Float
   durationMin      Int
   notes            String?
+  feeling          Int?
   photoPreUrl      String?
   photoPostUrl     String?
   pointsEarned     Int      @default(0)

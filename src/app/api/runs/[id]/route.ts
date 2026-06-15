@@ -34,6 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const newDurationMin = body.durationMin !== undefined ? parseInt(body.durationMin) : existing.durationMin;
   const newDate       = body.date !== undefined ? new Date(body.date) : existing.date;
   const newNotes      = body.notes !== undefined ? (body.notes || null) : existing.notes;
+  const newFeeling    = body.feeling !== undefined ? (body.feeling || null) : existing.feeling;
 
   // ── 1. Adjust pointsEarned preserving original streak/program bonuses ────────
   // Delta on distance pts (2 pt per km floor) + PR bonus change
@@ -68,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // ── 2. Update the run ────────────────────────────────────────────────────────
   const updated = await prisma.run.update({
     where: { id },
-    data: { distanceKm: newDistanceKm, durationMin: newDurationMin, date: newDate, notes: newNotes, pointsEarned: newPointsEarned, isPersonalRecord: newIsPersonalRecord },
+    data: { distanceKm: newDistanceKm, durationMin: newDurationMin, date: newDate, notes: newNotes, feeling: newFeeling, pointsEarned: newPointsEarned, isPersonalRecord: newIsPersonalRecord },
   });
 
   // Apply PR flag corrections on other runs

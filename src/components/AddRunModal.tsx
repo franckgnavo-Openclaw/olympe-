@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BADGES, PROGRAM_BONUS_MULTIPLIER } from "@/lib/points";
 import { SESSIONS, TYPE_META } from "@/lib/program";
 import { GameModal } from "@/components/ui/GameModal";
+import { FeelingStars } from "@/components/ui/FeelingStars";
 
 const PROGRAMS = [
   { id: "10km-decouverte", name: "10km — Route Découverte", emoji: "🏃", totalWeeks: 8 },
@@ -123,6 +124,7 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
   const [durationMin, setDurationMin] = useState("");
   const [paceMin, setPaceMin] = useState("");
   const [paceSec, setPaceSec] = useState("");
+  const [feeling, setFeeling] = useState(0);
   const [notes, setNotes] = useState("");
   const [postFile, setPostFile] = useState<File | null>(null);
   const [postPreview, setPostPreview] = useState<string | null>(null);
@@ -155,16 +157,16 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
     setLoading(true); setError("");
     const res = await fetch("/api/runs", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, distanceKm: parseFloat(distanceKm), durationMin: parseInt(durationMin), notes, isProgramRun: isProgramRun && !!selectedProgramId && !!selectedSessionDay }),
+      body: JSON.stringify({ date, distanceKm: parseFloat(distanceKm), durationMin: parseInt(durationMin), notes, feeling: feeling || undefined, isProgramRun: isProgramRun && !!selectedProgramId && !!selectedSessionDay }),
     });
     if (!res.ok) { setError((await res.json()).error ?? "Erreur"); setLoading(false); return; }
     const data: RunResult = await res.json();
     setResult(data);
-    // Mark the program session as done
+    // Mark the program session as done — lie le runId pour pouvoir le supprimer plus tard
     if (isProgramRun && selectedProgramId && selectedSessionDay) {
       await fetch("/api/program", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ day: selectedSessionDay, completed: true }),
+        body: JSON.stringify({ day: selectedSessionDay, completed: true, runId: data.run?.id ?? null, notes, feeling: feeling || undefined }),
       });
     }
     setLoading(false);
@@ -288,6 +290,10 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
         )}
         </AnimatePresence>
 
+        {(() => {
+        const programLocked = isProgramRun && !selectedSessionDay;
+        return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: programLocked ? 0.4 : 1, pointerEvents: programLocked ? "none" : "auto", transition: "opacity 0.2s" }}>
         {isProgramRun ? (
           <>
             {/* Durée — pré-remplie depuis la séance, éditable */}
@@ -355,10 +361,18 @@ export function AddRunModal({ onClose, onSuccess }: Props) {
           );
         })()}
 
+        {/* Ressenti */}
+        <Field label="Ressenti (1-10)">
+          <FeelingStars value={feeling} onChange={setFeeling} />
+        </Field>
+
         {/* 6. Notes */}
         <Field label="Note (optionnel)">
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Super run du matin…" style={iStyle} className="game-input" />
         </Field>
+        </div>
+        );
+        })()}
 
       </form>
       {/* actions rendered outside form via form= attribute */}

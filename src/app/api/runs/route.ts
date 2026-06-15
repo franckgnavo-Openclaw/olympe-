@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       distanceKm: true,
       durationMin: true,
       notes: true,
+      feeling: true,
       pointsEarned: true,
       isPersonalRecord: true,
       isProgramRun: true,
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-  const { date, distanceKm, durationMin, notes, isProgramRun } = await req.json();
+  const { date, distanceKm, durationMin, notes, isProgramRun, feeling } = await req.json();
 
   if (!date || !distanceKm || !durationMin) {
     return NextResponse.json({ error: "Champs manquants" }, { status: 400 });
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
       distanceKm: parsedDistance,
       durationMin: parsedDuration,
       notes,
+      feeling: feeling ?? null,
       pointsEarned: points,
       isPersonalRecord,
       isProgramRun: !!isProgramRun,
