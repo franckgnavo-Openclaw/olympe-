@@ -27,6 +27,17 @@ interface Run {
   photoPostUrl?: string | null;
 }
 
+interface UpcomingRace {
+  id: string;
+  name: string;
+  date: string;
+  city: string;
+  department: string | null;
+  distanceKm: number;
+  registrationUrl: string | null;
+  registrationEnd: string | null;
+}
+
 interface Stats {
   totalKm: number;
   totalRuns: number;
@@ -46,6 +57,7 @@ export default function DashboardPage() {
   const [showAddRun, setShowAddRun] = useState(false);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+  const [upcomingRaces, setUpcomingRaces] = useState<UpcomingRace[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
@@ -57,6 +69,7 @@ export default function DashboardPage() {
       Promise.all([
         fetch("/api/runs").then(r => r.ok ? r.json() : []).then(setRuns),
         fetch("/api/stats").then(r => r.ok ? r.json() : null).then(d => d && setStats(d)),
+        fetch("/api/races?limit=3").then(r => r.ok ? r.json() : []).then(setUpcomingRaces),
       ]).finally(() => setDataLoading(false));
     }
   }, [status]);
@@ -251,6 +264,66 @@ export default function DashboardPage() {
               <StatCard label="Points" value={stats.totalPoints.toLocaleString()} unit="pts de gloire" color="var(--gold)" delay={0.2} />
               <StatCard label="Temps" value={`${Math.floor(stats.totalMin / 60)}h${String(stats.totalMin % 60).padStart(2, "0")}`} unit="au combat" color="var(--gold-l)" delay={0.25} />
             </div>
+          )}
+
+          {/* Prochaines courses */}
+          {upcomingRaces.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              style={{ marginBottom: 28 }}
+            >
+              <div style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, var(--border), transparent)", width: 24 }} />
+                  <span style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: "var(--muted)", letterSpacing: "0.15em" }}>
+                    PROCHAINES COURSES
+                  </span>
+                </div>
+                <Link href="/races" style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--gold)", textDecoration: "none", letterSpacing: "0.08em" }}>
+                  VOIR TOUT →
+                </Link>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {upcomingRaces.map(race => {
+                  const d = new Date(race.date);
+                  const km = race.distanceKm;
+                  const color = km <= 5 ? "#7ab648" : km <= 10 ? "#c9a227" : km <= 21.2 ? "#d4732a" : km <= 42.3 ? "#c44b1a" : "#c41e3a";
+                  const label = km === 5 ? "5 km" : km === 10 ? "10 km" : km >= 21 && km <= 21.2 ? "Semi" : km >= 42 && km <= 42.3 ? "Marathon" : `${km} km`;
+                  return (
+                    <div key={race.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderLeft: `3px solid ${color}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+                      <div style={{ position: "absolute", top: -1, right: -1, width: 8, height: 8, borderTop: `1px solid ${color}`, borderRight: `1px solid ${color}` }} />
+                      <div style={{ flexShrink: 0, textAlign: "center", minWidth: 32 }}>
+                        <p style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: 16, color, lineHeight: 1 }}>{d.getDate()}</p>
+                        <p style={{ fontSize: 8, color: "var(--muted)", fontFamily: "'Cinzel', serif" }}>
+                          {d.toLocaleDateString("fr-FR", { month: "short" }).toUpperCase()}
+                        </p>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: 12, color: "var(--text)", marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {race.name}
+                        </p>
+                        <p style={{ fontSize: 11, color: "var(--muted)" }}>
+                          📍 {race.city}{race.department ? ` (${race.department})` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                        <span style={{ fontSize: 9, padding: "2px 7px", background: `${color}20`, border: `1px solid ${color}55`, color, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                          {label}
+                        </span>
+                        {race.registrationUrl && (
+                          <a href={race.registrationUrl} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 9, color: "var(--gold)", textDecoration: "none", fontFamily: "'Cinzel', serif" }}>
+                            S'inscrire →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
           )}
 
           {/* Add run CTA */}

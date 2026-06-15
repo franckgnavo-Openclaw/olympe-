@@ -120,6 +120,31 @@ model UserBadge {
   @@map("user_badges")
 }
 
+model Race {
+  id              String   @id @default(cuid())
+  externalId      String   @unique
+  name            String
+  date            DateTime
+  city            String
+  department      String?
+  distanceKm      Float
+  raceType        String?
+  registrationUrl String?
+  registrationEnd DateTime?
+  organizer       String?
+  description     String?
+  elevation       Int?
+  maxParticipants Int?
+  source          String   @default("courseapied")
+  scrapedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([date])
+  @@index([distanceKm])
+  @@index([city])
+  @@map("races")
+}
+
 model UserProgramSession {
   id          String    @id @default(cuid())
   userId      String
