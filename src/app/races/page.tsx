@@ -22,23 +22,6 @@ interface Race {
 
 type CalView = "year" | "month" | "week" | "day";
 
-const REGIONS: Record<string, string[]> = {
-  "Île-de-France":        ["75","77","78","91","92","93","94","95"],
-  "Auvergne-Rhône-Alpes": ["01","03","07","15","26","38","42","43","63","69","73","74"],
-  "Bourgogne-Franche-Comté": ["21","25","39","58","70","71","89","90"],
-  "Bretagne":             ["22","29","35","56"],
-  "Centre-Val de Loire":  ["18","28","36","37","41","45"],
-  "Corse":                ["2A","2B"],
-  "Grand Est":            ["08","10","51","52","54","55","57","67","68","88"],
-  "Hauts-de-France":      ["02","59","60","62","80"],
-  "Normandie":            ["14","27","50","61","76"],
-  "Nouvelle-Aquitaine":   ["16","17","19","23","24","33","40","47","64","79","86","87"],
-  "Occitanie":            ["09","11","12","30","31","32","34","46","48","65","66","81","82"],
-  "Pays de la Loire":     ["44","49","53","72","85"],
-  "Provence-Alpes-Côte d'Azur": ["04","05","06","13","83","84"],
-  "DOM-TOM":              ["971","972","973","974","975","976","984","987","988"],
-};
-
 const FR_MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const FR_DAYS_SHORT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 
@@ -360,8 +343,6 @@ export default function RacesPage() {
   const [view, setView] = useState<CalView>("month");
   const [cursor, setCursor] = useState(new Date());
   const [distRange, setDistRange] = useState<[number, number]>([0, 100]);
-  const [regionFilter, setRegionFilter] = useState("");
-  const [deptFilter, setDeptFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
@@ -373,17 +354,13 @@ export default function RacesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const regionDepts = regionFilter ? REGIONS[regionFilter] ?? [] : [];
-
   const filtered = useMemo(() => {
     return races.filter(r => {
       if (r.distanceKm < distRange[0] || r.distanceKm > distRange[1]) return false;
-      if (regionDepts.length > 0 && !regionDepts.includes(r.department ?? "")) return false;
-      if (deptFilter && !(r.department ?? "").startsWith(deptFilter)) return false;
       if (cityFilter && !r.city.toLowerCase().includes(cityFilter.toLowerCase())) return false;
       return true;
     });
-  }, [races, distRange, regionDepts, deptFilter, cityFilter]);
+  }, [races, distRange, cityFilter]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -500,46 +477,17 @@ export default function RacesPage() {
                 </div>
               </div>
 
-              {/* Region / Dept / City filters */}
-              <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>
-                  <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.12em", marginBottom: 6 }}>RÉGION</p>
-                  <select
-                    value={regionFilter}
-                    onChange={e => { setRegionFilter(e.target.value); setDeptFilter(""); }}
-                    className="game-input"
-                    style={{ width: "100%", padding: "7px 10px", fontSize: 11 }}
-                  >
-                    <option value="">Toute la France</option>
-                    {Object.keys(REGIONS).map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.12em", marginBottom: 6 }}>DEPT</p>
-                    <input
-                      type="text"
-                      value={deptFilter}
-                      onChange={e => setDeptFilter(e.target.value)}
-                      placeholder="75, 69..."
-                      className="game-input"
-                      style={{ width: "100%", padding: "7px 10px", fontSize: 12 }}
-                    />
-                  </div>
-                  <div style={{ flex: 2 }}>
-                    <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.12em", marginBottom: 6 }}>VILLE</p>
-                    <input
-                      type="text"
-                      value={cityFilter}
-                      onChange={e => setCityFilter(e.target.value)}
-                      placeholder="Paris, Lyon..."
-                      className="game-input"
-                      style={{ width: "100%", padding: "7px 10px", fontSize: 12 }}
-                    />
-                  </div>
-                </div>
+              {/* City filter */}
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <p style={{ fontFamily: "'Cinzel', serif", fontSize: 9, color: "var(--muted)", letterSpacing: "0.12em", marginBottom: 10 }}>VILLE</p>
+                <input
+                  type="text"
+                  value={cityFilter}
+                  onChange={e => setCityFilter(e.target.value)}
+                  placeholder="Paris, Lyon..."
+                  className="game-input"
+                  style={{ width: "100%", padding: "7px 10px", fontSize: 12 }}
+                />
               </div>
             </div>
           </div>
